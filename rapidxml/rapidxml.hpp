@@ -25,8 +25,9 @@
 
 #if defined(RAPIDXML_NO_EXCEPTIONS)
 
-#define RAPIDXML_PARSE_ERROR(what, where) { parse_error_handler(what, where); assert(0); }
-#define RAPIDXML_EOF_ERROR(what, where) { parse_error_handler(what, where); assert(0); }
+#define RAPIDXML_PARSE_ERROR(what, where) parse_error_handler(_F(what), where)
+#define RAPIDXML_EOF_ERROR(what, where) parse_error_handler(_F(what), where)
+#define RAPIDXML_VALIDATION_ERROR(what, where) parse_error_handler(_F(what), where)
 
 namespace rapidxml
 {
@@ -55,6 +56,7 @@ namespace rapidxml
 
 #define RAPIDXML_PARSE_ERROR(what, where) {if (*where == Ch(0)) throw eof_error(what, where); else throw parse_error(what, where);} (void)0
 #define RAPIDXML_EOF_ERROR(what, where) throw eof_error(what, where)
+#define RAPIDXML_VALIDATION_ERROR(what, where) throw validation_error(what, where);
 
 namespace rapidxml
 {
@@ -103,7 +105,7 @@ namespace rapidxml
     class validation_error : public std::runtime_error
     {
     public:
-        validation_error(const char * what)
+        validation_error(const char * what, void * where)
             : std::runtime_error(what) {}
     };
 }
@@ -117,14 +119,14 @@ namespace rapidxml
     // Size of static memory block of memory_pool.
     // Define RAPIDXML_STATIC_POOL_SIZE before including rapidxml.hpp if you want to override the default value.
     // No dynamic memory allocations are performed by memory_pool until static memory is exhausted.
-    #define RAPIDXML_STATIC_POOL_SIZE (64 * 1024)
+    #define RAPIDXML_STATIC_POOL_SIZE (2 * 1024)
 #endif
 
 #ifndef RAPIDXML_DYNAMIC_POOL_SIZE
     // Size of dynamic memory block of memory_pool.
     // Define RAPIDXML_DYNAMIC_POOL_SIZE before including rapidxml.hpp if you want to override the default value.
     // After the static block is exhausted, dynamic blocks with approximately this size are allocated by memory_pool.
-    #define RAPIDXML_DYNAMIC_POOL_SIZE (64 * 1024)
+    #define RAPIDXML_DYNAMIC_POOL_SIZE (4 * 1024)
 #endif
 
 #ifndef RAPIDXML_ALIGNMENT
@@ -305,34 +307,26 @@ namespace rapidxml
     namespace internal
     {
 
-        // Struct that contains lookup tables for the parser
-        // It must be a template to allow correct linking (because it has static data members, which are defined in a header file).
-        template<int Dummy>
-        struct lookup_tables
-        {
-            static const unsigned char lookup_whitespace[256];              // Whitespace table
-            static const unsigned char lookup_node_name[256];               // Node name table
-            static const unsigned char lookup_element_name[256];            // Element name table
-            static const unsigned char lookup_text[256];                    // Text table
-            static const unsigned char lookup_text_pure_no_ws[256];         // Text table
-            static const unsigned char lookup_text_pure_with_ws[256];       // Text table
-            static const unsigned char lookup_attribute_name[256];          // Attribute name table
-            static const unsigned char lookup_attribute_data_1[256];        // Attribute data table with single quote
-            static const unsigned char lookup_attribute_data_1_pure[256];   // Attribute data table with single quote
-            static const unsigned char lookup_attribute_data_2[256];        // Attribute data table with double quotes
-            static const unsigned char lookup_attribute_data_2_pure[256];   // Attribute data table with double quotes
-            static const unsigned char lookup_digits[256];                  // Digits
-            static const unsigned char lookup_upcase[256];                  // To uppercase conversion table for ASCII characters
-        };
+        // Forward declaration for function templates to perform character lookups
+        template<typename Ch> unsigned char lookup_whitespace(Ch c);            // Whitespace table
+        template<typename Ch> unsigned char lookup_node_name(Ch c);             // Node name table
+        template<typename Ch> unsigned char lookup_element_name(Ch c);          // Element name table
+        template<typename Ch> unsigned char lookup_text(Ch c);                  // Text table
+        template<typename Ch> unsigned char lookup_text_pure_no_ws(Ch c);       // Text table
+        template<typename Ch> unsigned char lookup_text_pure_with_ws(Ch c);     // Text table
+        template<typename Ch> unsigned char lookup_attribute_name(Ch c);        // Attribute name table
+        template<typename Ch> unsigned char lookup_attribute_data_1(Ch c);      // Attribute data table with single quote
+        template<typename Ch> unsigned char lookup_attribute_data_1_pure(Ch c); // Attribute data table with single quote
+        template<typename Ch> unsigned char lookup_attribute_data_2(Ch c);      // Attribute data table with double quotes
+        template<typename Ch> unsigned char lookup_attribute_data_2_pure(Ch c); // Attribute data table with double quotes
+        template<typename Ch> unsigned char lookup_digits(Ch c);                // Digits
+        template<typename Ch> unsigned char lookup_upcase(Ch c);                // To uppercase conversion table for ASCII characters
 
         // Find length of the string
         template<class Ch>
         inline std::size_t measure(const Ch *p)
         {
-            const Ch *tmp = p;
-            while (*tmp)
-                ++tmp;
-            return tmp - p;
+            return strlen(p);
         }
 
         // Compare strings for equality
@@ -343,14 +337,12 @@ namespace rapidxml
                 return false;
             if (case_sensitive)
             {
-                for (const Ch *end = p1 + size1; p1 < end; ++p1, ++p2)
-                    if (*p1 != *p2)
-                        return false;
+                return memcmp(p1, p2, size1) == 0;
             }
             else
             {
                 for (const Ch *end = p1 + size1; p1 < end; ++p1, ++p2)
-                    if (lookup_tables<0>::lookup_upcase[static_cast<unsigned char>(*p1)] != lookup_tables<0>::lookup_upcase[static_cast<unsigned char>(*p2)])
+                    if (lookup_upcase(*p1) != lookup_upcase(*p2))
                         return false;
             }
             return true;
@@ -509,9 +501,14 @@ namespace rapidxml
                 size = internal::measure(source) + 1;
             Ch *result = static_cast<Ch *>(allocate_aligned(size * sizeof(Ch)));
             if (source)
-                for (std::size_t i = 0; i < size; ++i)
-                    result[i] = source[i];
+            	memcpy(result, source, size);
             return result;
+        }
+
+        Ch *allocate_string(const FlashString& source)
+        {
+        	LOAD_FSTR(s, source);
+            return allocate_string(s, source.length());
         }
 
         Ch * nullstr()
@@ -523,14 +520,14 @@ namespace rapidxml
         Ch * xmlns_xml(std::size_t & xmlns_size)
         {
             if (!m_xmlns_xml)
-                m_xmlns_xml = allocate_string("http://www.w3.org/XML/1998/namespace");
+                m_xmlns_xml = allocate_string(FS_xmlns_xml);
             xmlns_size = internal::measure(m_xmlns_xml);
             return m_xmlns_xml;
         }
         Ch * xmlns_xmlns(std::size_t & xmlns_size)
         {
             if (!m_xmlns_xmlns)
-                m_xmlns_xmlns = allocate_string("http://www.w3.org/2000/xmlns/");
+                m_xmlns_xmlns = allocate_string(FS_xmlns_xmlns);
             xmlns_size = internal::measure(m_xmlns_xmlns);
             return m_xmlns_xmlns;
         }
@@ -1541,7 +1538,7 @@ namespace rapidxml
         void validate() const
         {
             if (this->xmlns() == 0)
-                throw validation_error("Element XMLNS unbound");
+                RAPIDXML_VALIDATION_ERROR("Element XMLNS unbound", 0);
             for (xml_node<Ch> * child = this->first_node();
                  child;
                  child = child->next_sibling()) {
@@ -1551,16 +1548,16 @@ namespace rapidxml
                  attribute;
                  attribute = attribute->m_next_attribute) {
                 if (attribute->xmlns() == 0)
-                    throw validation_error("Attribute XMLNS unbound");
+                    RAPIDXML_VALIDATION_ERROR("Attribute XMLNS unbound", 0);
                 for (xml_attribute<Ch> *otherattr = first_attribute();
                      otherattr != attribute;
                      otherattr = otherattr->m_next_attribute) {
                     if (internal::compare(attribute->name(), attribute->name_size(), otherattr->name(), otherattr->name_size(), true)) {
-                        throw validation_error("Attribute doubled");
+                        RAPIDXML_VALIDATION_ERROR("Attribute doubled", 0);
                     }
                     if (internal::compare(attribute->local_name(), attribute->local_name_size(), otherattr->local_name(), otherattr->local_name_size(), true)
                         && internal::compare(attribute->xmlns(), attribute->xmlns_size(), otherattr->xmlns(), otherattr->xmlns_size(), true))
-                        throw validation_error("Attribute XMLNS doubled");
+                        RAPIDXML_VALIDATION_ERROR("Attribute XMLNS doubled", 0);
                 }
             }
         }
@@ -1748,7 +1745,7 @@ namespace rapidxml
         {
             static unsigned char test(Ch ch)
             {
-                return internal::lookup_tables<0>::lookup_whitespace[static_cast<unsigned char>(ch)];
+                return internal::lookup_whitespace(ch);
             }
         };
 
@@ -1757,7 +1754,7 @@ namespace rapidxml
         {
             static unsigned char test(Ch ch)
             {
-                return internal::lookup_tables<0>::lookup_node_name[static_cast<unsigned char>(ch)];
+                return internal::lookup_node_name(ch);
             }
         };
 
@@ -1766,7 +1763,7 @@ namespace rapidxml
         {
             static unsigned char test(Ch ch)
             {
-                return internal::lookup_tables<0>::lookup_element_name[static_cast<unsigned char>(ch)];
+                return internal::lookup_element_name(ch);
             }
         };
 
@@ -1775,7 +1772,7 @@ namespace rapidxml
         {
             static unsigned char test(Ch ch)
             {
-                return internal::lookup_tables<0>::lookup_attribute_name[static_cast<unsigned char>(ch)];
+                return internal::lookup_attribute_name(ch);
             }
         };
 
@@ -1784,7 +1781,7 @@ namespace rapidxml
         {
             static unsigned char test(Ch ch)
             {
-                return internal::lookup_tables<0>::lookup_text[static_cast<unsigned char>(ch)];
+                return internal::lookup_text(ch);
             }
         };
 
@@ -1793,7 +1790,7 @@ namespace rapidxml
         {
             static unsigned char test(Ch ch)
             {
-                return internal::lookup_tables<0>::lookup_text_pure_no_ws[static_cast<unsigned char>(ch)];
+                return internal::lookup_text_pure_no_ws(ch);
             }
         };
 
@@ -1802,7 +1799,7 @@ namespace rapidxml
         {
             static unsigned char test(Ch ch)
             {
-                return internal::lookup_tables<0>::lookup_text_pure_with_ws[static_cast<unsigned char>(ch)];
+                return internal::lookup_text_pure_with_ws(ch);
             }
         };
 
@@ -1813,9 +1810,9 @@ namespace rapidxml
             static unsigned char test(Ch ch)
             {
                 if (Quote == Ch('\''))
-                    return internal::lookup_tables<0>::lookup_attribute_data_1[static_cast<unsigned char>(ch)];
+                    return internal::lookup_attribute_data_1(ch);
                 if (Quote == Ch('\"'))
-                    return internal::lookup_tables<0>::lookup_attribute_data_2[static_cast<unsigned char>(ch)];
+                    return internal::lookup_attribute_data_2(ch);
                 return 0;       // Should never be executed, to avoid warnings on Comeau
             }
         };
@@ -1827,9 +1824,9 @@ namespace rapidxml
             static unsigned char test(Ch ch)
             {
                 if (Quote == Ch('\''))
-                    return internal::lookup_tables<0>::lookup_attribute_data_1_pure[static_cast<unsigned char>(ch)];
+                    return internal::lookup_attribute_data_1_pure(ch);
                 if (Quote == Ch('\"'))
-                    return internal::lookup_tables<0>::lookup_attribute_data_2_pure[static_cast<unsigned char>(ch)];
+                    return internal::lookup_attribute_data_2_pure(ch);
                 return 0;       // Should never be executed, to avoid warnings on Comeau
             }
         };
@@ -1982,7 +1979,7 @@ namespace rapidxml
                                 src += 3;   // Skip &#x
                                 while (1)
                                 {
-                                    unsigned char digit = internal::lookup_tables<0>::lookup_digits[static_cast<unsigned char>(*src)];
+                                    unsigned char digit = internal::lookup_digits(*src);
                                     if (digit == 0xFF)
                                         break;
                                     code = code * 16 + digit;
@@ -1996,7 +1993,7 @@ namespace rapidxml
                                 src += 2;   // Skip &#
                                 while (1)
                                 {
-                                    unsigned char digit = internal::lookup_tables<0>::lookup_digits[static_cast<unsigned char>(*src)];
+                                    unsigned char digit = internal::lookup_digits(*src);
                                     if (digit == 0xFF)
                                         break;
                                     code = code * 10 + digit;
@@ -2653,33 +2650,26 @@ namespace rapidxml
     namespace internal
     {
 
-        // Whitespace (space \n \r \t)
-        template<int Dummy>
-        const unsigned char lookup_tables<Dummy>::lookup_whitespace[256] =
+        template<typename Ch>
+        inline unsigned char lookup(const unsigned char table[], Ch ch)
         {
-          // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
-             0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  0,  0,  1,  0,  0,  // 0
-             0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  // 1
-             1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  // 2
-             0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  // 3
-             0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  // 4
-             0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  // 5
-             0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  // 6
-             0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  // 7
-             0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  // 8
-             0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  // 9
-             0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  // A
-             0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  // B
-             0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  // C
-             0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  // D
-             0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  // E
-             0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0   // F
-        };
+//        	return pgm_read_byte(&table[static_cast<unsigned char>(ch)]);
+            return table[static_cast<unsigned char>(ch)];
+        }
+
+        // Whitespace (space \n \r \t)
+        template<typename Ch>
+        unsigned char lookup_whitespace(Ch ch)
+        {
+            return isspace(static_cast<char>(ch));
+        }
 
         // Element name (anything but space \n \r \t / > ? \0 and :)
-        template<int Dummy>
-        const unsigned char lookup_tables<Dummy>::lookup_element_name[256] =
+        template<typename Ch>
+        unsigned char lookup_element_name(Ch ch)
         {
+        	static const unsigned char table[256] =
+        	{
           // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
              0,  1,  1,  1,  1,  1,  1,  1,  1,  0,  0,  1,  1,  0,  1,  1,  // 0
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 1
@@ -2697,12 +2687,16 @@ namespace rapidxml
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // D
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // E
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1   // F
-        };
+        	};
+        	return lookup(table, ch);
+        }
 
         // Node name (anything but space \n \r \t / > ? \0)
-        template<int Dummy>
-        const unsigned char lookup_tables<Dummy>::lookup_node_name[256] =
+        template<typename Ch>
+        unsigned char lookup_node_name(Ch ch)
         {
+        	static const unsigned char table[256] =
+        	{
           // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
              0,  1,  1,  1,  1,  1,  1,  1,  1,  0,  0,  1,  1,  0,  1,  1,  // 0
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 1
@@ -2720,12 +2714,15 @@ namespace rapidxml
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // D
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // E
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1   // F
-        };
+        	};
+        	return lookup(table, ch);
+        }
 
         // Text (i.e. PCDATA) (anything but < \0)
-        template<int Dummy>
-        const unsigned char lookup_tables<Dummy>::lookup_text[256] =
+        template<typename Ch>
+        unsigned char lookup_text(Ch ch)
         {
+        	static const unsigned char table[256] = {
           // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
              0,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 0
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 1
@@ -2743,13 +2740,16 @@ namespace rapidxml
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // D
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // E
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1   // F
-        };
+            };
+            return lookup(table, ch);
+        }
 
-        // Text (i.e. PCDATA) that does not require processing when ws normalization is disabled
+        // Text (i.e. PCDATA) that does not require processing when ws normalization is disabled 
         // (anything but < \0 &)
-        template<int Dummy>
-        const unsigned char lookup_tables<Dummy>::lookup_text_pure_no_ws[256] =
+        template<typename Ch>
+        unsigned char lookup_text_pure_no_ws(Ch ch)
         {
+            static const unsigned char table[256] = {
           // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
              0,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 0
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 1
@@ -2767,13 +2767,16 @@ namespace rapidxml
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // D
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // E
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1   // F
-        };
+        	};
+        	return lookup(table, ch);
+        }
 
         // Text (i.e. PCDATA) that does not require processing when ws normalizationis is enabled
         // (anything but < \0 & space \n \r \t)
-        template<int Dummy>
-        const unsigned char lookup_tables<Dummy>::lookup_text_pure_with_ws[256] =
+        template<typename Ch>
+        unsigned char lookup_text_pure_with_ws(Ch ch)
         {
+            static const unsigned char table[256] = {
           // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
              0,  1,  1,  1,  1,  1,  1,  1,  1,  0,  0,  1,  1,  0,  1,  1,  // 0
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 1
@@ -2791,12 +2794,15 @@ namespace rapidxml
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // D
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // E
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1   // F
-        };
+            };
+            return lookup(table, ch);
+        }
 
         // Attribute name (anything but space \n \r \t / < > = ? ! \0)
-        template<int Dummy>
-        const unsigned char lookup_tables<Dummy>::lookup_attribute_name[256] =
+        template<typename Ch>
+        unsigned char lookup_attribute_name(Ch ch)
         {
+            static const unsigned char table[256] = {
           // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
              0,  1,  1,  1,  1,  1,  1,  1,  1,  0,  0,  1,  1,  0,  1,  1,  // 0
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 1
@@ -2814,12 +2820,15 @@ namespace rapidxml
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // D
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // E
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1   // F
-        };
+            };
+            return lookup(table, ch);
+        }
 
         // Attribute data with single quote (anything but ' \0)
-        template<int Dummy>
-        const unsigned char lookup_tables<Dummy>::lookup_attribute_data_1[256] =
+        template<typename Ch>
+        unsigned char lookup_attribute_data_1(Ch ch)
         {
+            static const unsigned char table[256] = {
           // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
              0,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 0
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 1
@@ -2837,12 +2846,15 @@ namespace rapidxml
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // D
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // E
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1   // F
-        };
+        	};
+        	return lookup(table, ch);
+        }
 
         // Attribute data with single quote that does not require processing (anything but ' \0 &)
-        template<int Dummy>
-        const unsigned char lookup_tables<Dummy>::lookup_attribute_data_1_pure[256] =
+        template<typename Ch>
+        unsigned char lookup_attribute_data_1_pure(Ch ch)
         {
+            static const unsigned char table[256] = {
           // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
              0,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 0
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 1
@@ -2860,12 +2872,15 @@ namespace rapidxml
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // D
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // E
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1   // F
-        };
+        	};
+        	return lookup(table, ch);
+        }
 
         // Attribute data with double quote (anything but " \0)
-        template<int Dummy>
-        const unsigned char lookup_tables<Dummy>::lookup_attribute_data_2[256] =
+        template<typename Ch>
+        unsigned char lookup_attribute_data_2(Ch ch)
         {
+            static const unsigned char table[256] = {
           // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
              0,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 0
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 1
@@ -2883,12 +2898,15 @@ namespace rapidxml
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // D
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // E
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1   // F
-        };
+        	};
+        	return lookup(table, ch);
+        }
 
         // Attribute data with double quote that does not require processing (anything but " \0 &)
-        template<int Dummy>
-        const unsigned char lookup_tables<Dummy>::lookup_attribute_data_2_pure[256] =
-        {
+		template<typename Ch>
+		unsigned char lookup_attribute_data_2_pure(Ch ch)
+		{
+			static const unsigned char table[256] = {
           // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
              0,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 0
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 1
@@ -2906,53 +2924,23 @@ namespace rapidxml
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // D
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // E
              1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1   // F
-        };
+        	};
+        	return lookup(table, ch);
+        }
 
         // Digits (dec and hex, 255 denotes end of numeric character reference)
-        template<int Dummy>
-        const unsigned char lookup_tables<Dummy>::lookup_digits[256] =
+        template<typename Ch>
+        unsigned char lookup_digits(Ch ch)
         {
-          // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
-           255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,  // 0
-           255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,  // 1
-           255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,  // 2
-             0,  1,  2,  3,  4,  5,  6,  7,  8,  9,255,255,255,255,255,255,  // 3
-           255, 10, 11, 12, 13, 14, 15,255,255,255,255,255,255,255,255,255,  // 4
-           255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,  // 5
-           255, 10, 11, 12, 13, 14, 15,255,255,255,255,255,255,255,255,255,  // 6
-           255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,  // 7
-           255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,  // 8
-           255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,  // 9
-           255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,  // A
-           255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,  // B
-           255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,  // C
-           255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,  // D
-           255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,  // E
-           255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255   // F
-        };
+            return isxdigit(static_cast<char>(ch));
+        }
 
         // Upper case conversion
-        template<int Dummy>
-        const unsigned char lookup_tables<Dummy>::lookup_upcase[256] =
+        template<typename Ch>
+        unsigned char lookup_upcase(Ch ch)
         {
-          // 0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  A   B   C   D   E   F
-           0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15,   // 0
-           16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,   // 1
-           32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,   // 2
-           48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63,   // 3
-           64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79,   // 4
-           80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95,   // 5
-           96, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79,   // 6
-           80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 123,124,125,126,127,  // 7
-           128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,  // 8
-           144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,  // 9
-           160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,  // A
-           176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,  // B
-           192,193,194,195,196,197,198,199,200,201,202,203,204,205,206,207,  // C
-           208,209,210,211,212,213,214,215,216,217,218,219,220,221,222,223,  // D
-           224,225,226,227,228,229,230,231,232,233,234,235,236,237,238,239,  // E
-           240,241,242,243,244,245,246,247,248,249,250,251,252,253,254,255   // F
-        };
+            return toupper(static_cast<char>(ch));
+        }
     }
     //! \endcond
 
