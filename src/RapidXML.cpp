@@ -17,8 +17,8 @@
  *
  ****/
 
-#include "../include/RapidXML.h"
-#include "../../rapidxml/rapidxml_print.hpp"
+#include "include/RapidXML.h"
+#include "../rapidxml/rapidxml_print.hpp"
 #include "StringIterator.h"
 #include "PrintIterator.h"
 #include <setjmp.h>
