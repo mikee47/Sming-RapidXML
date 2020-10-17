@@ -29,7 +29,7 @@
 DECLARE_FSTR(FS_xmlns_xml);
 DECLARE_FSTR(FS_xmlns_xmlns);
 
-#include "../rapidxml/rapidxml.hpp"
+#include "../../rapidxml/rapidxml.hpp"
 
 namespace XML
 {
