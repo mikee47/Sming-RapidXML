@@ -62,7 +62,7 @@ private:
 			auto len = length() + 1;
 			setlen(len);
 			auto cap = capacity();
-			return (length() < cap) ?: reserve(cap + 64);
+			return (length() < cap) ? true : reserve(cap + 64);
 		}
 	};
 
