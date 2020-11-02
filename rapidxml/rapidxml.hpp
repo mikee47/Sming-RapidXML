@@ -2668,7 +2668,7 @@ namespace rapidxml
         template<typename Ch>
         unsigned char lookup_whitespace(Ch ch)
         {
-            return isspace(static_cast<char>(ch));
+            return isspace(static_cast<unsigned char>(ch)) ? ch: 0;
         }
 
         // Element name (anything but space \n \r \t / > ? \0 and :)
@@ -2751,7 +2751,7 @@ namespace rapidxml
             return lookup(table, ch);
         }
 
-        // Text (i.e. PCDATA) that does not require processing when ws normalization is disabled 
+        // Text (i.e. PCDATA) that does not require processing when ws normalization is disabled
         // (anything but < \0 &)
         template<typename Ch>
         unsigned char lookup_text_pure_no_ws(Ch ch)
