@@ -21,6 +21,8 @@
 #include "../rapidxml/rapidxml_print.hpp"
 #include "StringIterator.h"
 #include "PrintIterator.h"
+#include <SplitString.h>
+#include <WVector.h>
 #include <setjmp.h>
 
 DEFINE_FSTR(FS_xmlns_xml, "http://www.w3.org/XML/1998/namespace");
@@ -154,6 +156,34 @@ Attribute* appendAttribute(Node* node, const char* name, const char* value, size
 	auto attr = doc->allocate_attribute(p_name, p_value);
 	node->append_attribute(attr);
 	return attr;
+}
+
+Node* getNode(const Document& doc, String path)
+{
+	Vector<String> parts;
+	size_t numParts = splitString(path, '/', parts);
+	Node* node = nullptr;
+	if(numParts == 0) {
+		return node;
+	}
+
+	if(parts[0].length() == 0) {
+		// get the root node without caring for its name
+		node = doc.first_node();
+	} else {
+		node = doc.first_node(parts[0].c_str());
+	}
+
+	if(node != nullptr) {
+		for(size_t i = 1; i < numParts; i++) {
+			node = node->first_node(parts[i].c_str());
+			if(node == nullptr) {
+				break;
+			}
+		}
+	}
+
+	return node;
 }
 
 } // namespace XML
