@@ -127,21 +127,36 @@ Attribute* appendAttribute(Node* node, const TString& name, const TValue& value)
 {
 	return appendAttribute(node, String(name), String(value));
 }
+/** @} */
 
 /**
- * @brief Gets a node from a document by path.
+ * @name Gets node from a document by path
  * @param doc
- * @param path  - using slash as path separator. Leading slash is important. Trailing slash if not allowed
- * 			Example1: /s:Body/u:GetContentResponse - will search for s:Body node that is a child of the root node.
- * 					                                The node u:GetContentResponse should be child of the s:Body node
- * 			Example2: s:Envelope/s:Body/u:GetContentResponse - will search for s:Body node that is a child of the root node named s:Envelope.
- * 													The node u:GetContentResponse should be child of the s:Body node
- * @note
- *
+ * @param path Node path using slash as separator
+ * @param ns Optional namespace
  * @retval Node* nullptr if none is found
+ *
+ *	Leading separator is important: if present, search starts at root node.
+ *	If omitted, first element must match the root node name.
+ *
+ *	Trailing separator is not allowed.
+ *
+ *	Example 1: /s:Body/u:GetContentResponse
+ *		Will search for s:Body node that is a child of the root node.
+ *		The node u:GetContentResponse should be child of the s:Body node
+ *
+ *	Example 2: s:Envelope/s:Body/u:GetContentResponse
+ *		Will search for s:Body node that is a child of the root node named s:Envelope.
+ *		The node u:GetContentResponse should be child of the s:Body node
+ *
+ * @{
  */
-Node* getNode(const Document& doc, String path);
+Node* getNode(const Document& doc, const char* path, const char* ns = nullptr);
 
+inline Node* getNode(const Document& doc, const String& path, const String& ns = nullptr)
+{
+	return getNode(doc, path.c_str(), ns.c_str());
+}
 /** @} */
 
 }; // namespace XML

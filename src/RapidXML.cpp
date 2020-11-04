@@ -21,8 +21,6 @@
 #include "../rapidxml/rapidxml_print.hpp"
 #include "StringIterator.h"
 #include "PrintIterator.h"
-#include <SplitString.h>
-#include <WVector.h>
 #include <setjmp.h>
 
 DEFINE_FSTR(FS_xmlns_xml, "http://www.w3.org/XML/1998/namespace");
@@ -158,30 +156,40 @@ Attribute* appendAttribute(Node* node, const char* name, const char* value, size
 	return attr;
 }
 
-Node* getNode(const Document& doc, String path)
+Node* getNode(const Document& doc, const char* path)
 {
-	Vector<String> parts;
-	size_t numParts = splitString(path, '/', parts);
-	Node* node = nullptr;
-	if(numParts == 0) {
-		return node;
+	if(path == nullptr || *path == '\0') {
+		return nullptr;
 	}
 
-	if(parts[0].length() == 0) {
-		// get the root node without caring for its name
-		node = doc.first_node();
+	auto ns_len = (ns == nullptr) ? 0 : strlen(ns);
+	Node* node;
+	if(*path == '/') {
+		// Start from root node, name doesn't matter
+		node = doc.first_node(nullptr, ns, 0, ns_len);
+		++path; // skip separator
 	} else {
-		node = doc.first_node(parts[0].c_str());
+		node = nullptr;
 	}
 
-	if(node != nullptr) {
-		for(size_t i = 1; i < numParts; i++) {
-			node = node->first_node(parts[i].c_str());
-			if(node == nullptr) {
-				break;
-			}
+	// Search each path element in turn
+	const char* sep;
+	do {
+		size_t elementLength;
+		sep = strchr(path, '/');
+		if(sep == nullptr) {
+			elementLength = strlen(path);
+		} else {
+			elementLength = sep - path;
 		}
-	}
+		if(node == nullptr) {
+			node = doc.first_node(path, ns, elementLength, ns_len);
+		} else {
+			node = node->first_node(path, ns, elementLength, ns_len);
+		}
+		// Skip to next element
+		path += elementLength + 1;
+	} while(node != nullptr && sep != nullptr);
 
 	return node;
 }
