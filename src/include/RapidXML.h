@@ -127,6 +127,21 @@ Attribute* appendAttribute(Node* node, const TString& name, const TValue& value)
 {
 	return appendAttribute(node, String(name), String(value));
 }
+
+/**
+ * @brief Gets a node from a document by path.
+ * @param doc
+ * @param path  - using slash as path separator. Leading slash is important. Trailing slash if not allowed
+ * 			Example1: /s:Body/u:GetContentResponse - will search for s:Body node that is a child of the root node.
+ * 					                                The node u:GetContentResponse should be child of the s:Body node
+ * 			Example2: s:Envelope/s:Body/u:GetContentResponse - will search for s:Body node that is a child of the root node named s:Envelope.
+ * 													The node u:GetContentResponse should be child of the s:Body node
+ * @note
+ *
+ * @retval Node* nullptr if none is found
+ */
+Node* getNode(const Document& doc, String path);
+
 /** @} */
 
 }; // namespace XML
