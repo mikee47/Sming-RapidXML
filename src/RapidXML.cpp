@@ -156,4 +156,65 @@ Attribute* appendAttribute(Node* node, const char* name, const char* value, size
 	return attr;
 }
 
+Node* getNode(XML::Node* node, const char* path, const char* ns, size_t ns_len)
+{
+	if(node == nullptr || path == nullptr || *path == '\0') {
+		return node;
+	}
+
+	if(ns_len == 0) {
+		ns_len = (ns == nullptr) ? 0 : strlen(ns);
+	}
+
+	// Search each path element in turn
+	const char* sep;
+	do {
+		size_t elementLength;
+		sep = strchr(path, '/');
+		if(sep == nullptr) {
+			elementLength = strlen(path);
+		} else {
+			elementLength = sep - path;
+		}
+		node = node->first_node(path, ns, elementLength, ns_len);
+		// Skip to next element
+		path += elementLength + 1;
+	} while(node != nullptr && sep != nullptr);
+
+	return node;
+}
+
+Node* getNode(const Document& doc, const char* path, const char* ns, size_t ns_len)
+{
+	if(path == nullptr || *path == '\0') {
+		return nullptr;
+	}
+
+	if(ns_len == 0) {
+		ns_len = (ns == nullptr) ? 0 : strlen(ns);
+	}
+
+	if(*path == '/') {
+		// Start from root node, name doesn't matter
+		auto node = doc.first_node(nullptr, ns, 0, ns_len);
+		++path; // skip separator
+		return getNode(node, path, ns);
+	}
+
+	// Get starting node from first path element
+	size_t elementLength;
+	const char* sep = strchr(path, '/');
+	if(sep == nullptr) {
+		// Single element
+		return doc.first_node(path, ns, 0, ns_len);
+	}
+
+	// More than one element
+	elementLength = sep - path;
+	auto node = doc.first_node(path, ns, elementLength, ns_len);
+	path += elementLength + 1;
+	// Parse remaining path
+	return getNode(node, path, ns, ns_len);
+}
+
 } // namespace XML
