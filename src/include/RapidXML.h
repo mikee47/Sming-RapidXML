@@ -144,7 +144,7 @@ Node* getNode(Node* node, const char* path, const char* ns, size_t ns_len = 0);
 
 inline Node* getNode(Node* node, const String& path, const String& ns = nullptr)
 {
-	return getNode(node, path.c_str(), ns.c_str(), ns.length());
+	return getNode(node, path.c_str(), ns ? ns.c_str() : nullptr, ns.length());
 }
 
 /** @} */
@@ -175,7 +175,7 @@ Node* getNode(const Document& doc, const char* path, const char* ns = nullptr, s
 
 inline Node* getNode(const Document& doc, const String& path, const String& ns = nullptr)
 {
-	return getNode(doc, path.c_str(), ns.c_str());
+	return getNode(doc, path.c_str(), ns ? ns.c_str() : nullptr, ns.length());
 }
 /** @} */
 
