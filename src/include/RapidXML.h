@@ -179,4 +179,25 @@ inline Node* getNode(const Document& doc, const String& path, const String& ns =
 }
 /** @} */
 
+/**
+ * @name Get node value
+ * @param node
+ * @param name
+ * @param name_size
+ * @retval String invalid if node or name not found
+ * @{
+ */
+String getValue(const Node* node, const char* name, size_t name_size);
+
+inline String getValue(const Node* node, const char* name)
+{
+	return name ? getValue(node, name, strlen(name)) : nullptr;
+}
+
+inline String getValue(const Node* node, const String& name)
+{
+	return getValue(node, name.c_str(), name.length());
+}
+/** @} */
+
 }; // namespace XML
