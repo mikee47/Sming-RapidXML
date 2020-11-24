@@ -187,16 +187,16 @@ inline Node* getNode(const Document& doc, const String& path, const String& ns =
  * @retval String invalid if node or name not found
  * @{
  */
-String getValue(const Node* node, const char* name, size_t name_size);
+String getValue(const Node* node, const char* name, size_t name_size, const char* ns = nullptr, size_t ns_size = 0);
 
-inline String getValue(const Node* node, const char* name)
+inline String getValue(const Node* node, const char* name, const char* ns = nullptr)
 {
-	return name ? getValue(node, name, strlen(name)) : nullptr;
+	return name ? getValue(node, name, strlen(name), ns, ns ? strlen(ns) : 0) : nullptr;
 }
 
-inline String getValue(const Node* node, const String& name)
+inline String getValue(const Node* node, const String& name, const String& ns = nullptr)
 {
-	return getValue(node, name.c_str(), name.length());
+	return getValue(node, name.c_str(), name.length(), ns ? ns.c_str() : nullptr, ns.length());
 }
 /** @} */
 

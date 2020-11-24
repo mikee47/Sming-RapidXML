@@ -217,13 +217,13 @@ Node* getNode(const Document& doc, const char* path, const char* ns, size_t ns_l
 	return getNode(node, path, ns, ns_len);
 }
 
-String getValue(const Node* node, const char* name, size_t name_size)
+String getValue(const Node* node, const char* name, size_t name_size, const char* ns, size_t ns_size)
 {
 	if(node == nullptr) {
 		return nullptr;
 	}
 
-	node = node->first_node(name, nullptr, name_size);
+	node = node->first_node(name, ns, name_size, ns_size);
 	if(node == nullptr) {
 		return nullptr;
 	}
