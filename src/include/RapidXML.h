@@ -200,4 +200,25 @@ inline String getValue(const Node* node, const String& name)
 }
 /** @} */
 
+/**
+ * @name Get attribute value
+ * @param node
+ * @param name
+ * @param name_size
+ * @retval String invalid if node or name not found
+ * @{
+ */
+String getAttribute(const Node* node, const char* name, size_t name_size);
+
+inline String getAttribute(const Node* node, const char* name)
+{
+	return name ? getAttribute(node, name, strlen(name)) : nullptr;
+}
+
+inline String getAttribute(const Node* node, const String& name)
+{
+	return getAttribute(node, name.c_str(), name.length());
+}
+/** @} */
+
 }; // namespace XML

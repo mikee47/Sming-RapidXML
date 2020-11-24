@@ -231,4 +231,17 @@ String getValue(const Node* node, const char* name, size_t name_size)
 	return String(node->value(), node->value_size());
 }
 
+String getAttribute(const Node* node, const char* name, size_t name_size)
+{
+	if(node == nullptr) {
+		return nullptr;
+	}
+
+	auto attr = node->first_attribute(name, name_size);
+	if(attr == nullptr) {
+		return nullptr;
+	}
+
+	return String(attr->value(), attr->value_size());
+}
 } // namespace XML
