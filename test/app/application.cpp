@@ -1,5 +1,5 @@
 /**
- * application.cpp - FlashString library integration tests
+ * application.cpp - RapidXML library integration tests
  *
  * Copyright 2019 mikee47 <mike@sillyhouse.net>
  *

@@ -39,9 +39,9 @@ public:
 	{
 	}
 
-#define CHECK(node, str_name)                                                                                          \
+#define CHECK_NODE(node, str_name)                                                                                     \
 	REQUIRE(node != nullptr);                                                                                          \
-	REQUIRE(F(str_name) == node->name());
+	REQUIRE_EQ(F(str_name), node->name());
 
 	void execute() override
 	{
@@ -50,17 +50,17 @@ public:
 			XML::Document doc;
 			REQUIRE(XML::deserialize(doc, request_xml));
 			auto node = doc.first_node();
-			CHECK(node, "Envelope");
+			CHECK_NODE(node, "Envelope");
 			node = XML::getNode(doc, "/", ns_soap);
-			CHECK(node, "Envelope");
+			CHECK_NODE(node, "Envelope");
 			node = XML::getNode(doc, _F("Envelope"), ns_soap);
-			CHECK(node, "Envelope");
+			CHECK_NODE(node, "Envelope");
 			node = XML::getNode(node, _F("Body"), ns_soap);
-			CHECK(node, "Body");
+			CHECK_NODE(node, "Body");
 			node = XML::getNode(doc, _F("/Body"), ns_soap);
-			CHECK(node, "Body");
+			CHECK_NODE(node, "Body");
 			node = XML::getNode(doc, _F("Envelope/Body"), ns_soap);
-			CHECK(node, "Body");
+			CHECK_NODE(node, "Body");
 			node = XML::getNode(doc, _F("Envelope"));
 			REQUIRE(node == nullptr);
 		}
@@ -70,12 +70,12 @@ public:
 			XML::Document doc;
 			REQUIRE(XML::deserialize(doc, dms_ddd_xml));
 			auto node = XML::getNode(doc, _F("root/device/iconList/icon/mimetype"), ns_device);
-			CHECK(node, "mimetype");
-			REQUIRE(F("image/png") == node->value());
+			CHECK_NODE(node, "mimetype");
+			REQUIRE_EQ(F("image/png"), node->value());
 			node = XML::getNode(doc, _F("root/device"), ns_device);
-			CHECK(node, "device")
+			CHECK_NODE(node, "device")
 			node = XML::getNode(node, _F("X_DLNADOC"), ns_dlna);
-			REQUIRE(F("DMS-1.50") == node->value());
+			REQUIRE_EQ(F("DMS-1.50"), node->value());
 		}
 	}
 };

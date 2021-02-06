@@ -513,7 +513,7 @@ namespace rapidxml
         Ch *allocate_string(const FlashString& source)
         {
         	LOAD_FSTR(s, source);
-            return allocate_string(s, source.length());
+            return allocate_string(s, source.length() + 1);
         }
 
         Ch * nullstr()
