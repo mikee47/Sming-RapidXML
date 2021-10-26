@@ -1,4 +1,4 @@
-/**
+/****
  * RapidXML.h - Helper code for using Rapid XML, with some similarity to ArduinoJson API
  *
  * Copyright 2019 mikee47 <mike@sillyhouse.net>
